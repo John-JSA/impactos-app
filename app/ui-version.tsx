@@ -1,3 +1,3 @@
-// in page.tsx
-import UI from "./ui-version";
-export default UI;
+export default function UIVersion() {
+  return <div>UI Version</div>;
+}
