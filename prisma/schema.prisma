@@ -1,0 +1,18 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Project {
+  id            Int      @id @default(autoincrement())
+  title         String
+  description   String
+  location      String
+  beneficiaries String
+  fundingGoal   Int
+  raised        Int      @default(0)
+  createdAt     DateTime @default(now())
+}

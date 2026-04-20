@@ -1,464 +1,395 @@
 "use client";
-import React, { useMemo, useState } from "react";
-import { motion } from "framer-motion";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Globe, Lightbulb, DollarSign, BarChart3, Users } from "lucide-react";
 
-const starterProblems = [
-  {
-    id: 1,
-    title: "Rural schools lack internet-enabled learning tools",
-    category: "Education",
-    country: "Ghana",
-    description:
-      "Many students in rural communities do not have access to digital classrooms, learning platforms, or reliable devices.",
-    impact: "4,500 students affected",
-    fundingGoal: 250000,
-    raised: 85000,
-    status: "Open",
-    aiSolution:
-      "Deploy solar-powered learning hubs with offline-first content sync, teacher training, and shared tablets for classroom rotation.",
-  },
-  {
-    id: 2,
-    title: "Farmers lose crops due to poor storage and market access",
-    category: "Agriculture",
-    country: "Ghana",
-    description:
-      "Small farmers face post-harvest losses because of weak logistics, limited cold storage, and low bargaining power.",
-    impact: "1,200 farmers affected",
-    fundingGoal: 500000,
-    raised: 120000,
-    status: "Open",
-    aiSolution:
-      "Create a shared storage and transport network with demand forecasting, SMS pricing alerts, and local aggregation centers.",
-  },
-  {
-    id: 3,
-    title: "Youth unemployment remains high despite technical talent",
-    category: "Jobs",
-    country: "Nigeria",
-    description:
-      "Young people need structured pathways into remote work, vocational skills, apprenticeships, and small business finance.",
-    impact: "8,000 youth affected",
-    fundingGoal: 800000,
-    raised: 410000,
-    status: "In Progress",
-    aiSolution:
-      "Launch a skills-to-income platform with verified training tracks, mentorship, employer matching, and micro-grants for tools.",
-  },
-];
+import { useEffect, useMemo, useState } from "react";
 
-function currency(amount) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
+type Project = {
+  id: number;
+  title: string;
+  description: string;
+  location: string;
+  beneficiaries: string;
+  fundingGoal: number;
+  raised: number;
+  createdAt?: string;
+};
 
-function percent(raised, goal) {
-  return Math.min(100, Math.round((raised / goal) * 100));
-}
+export default function Page() {
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [fundingId, setFundingId] = useState<number | null>(null);
 
-export default function ImpactOSMVP() {
-  const [problems, setProblems] = useState(starterProblems);
-  const [search, setSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  const [role, setRole] = useState("Community");
   const [form, setForm] = useState({
     title: "",
-    category: "Education",
-    country: "",
     description: "",
-    impact: "",
+    location: "",
+    beneficiaries: "",
     fundingGoal: "",
   });
 
-  const stats = useMemo(() => {
-    const totalRaised = problems.reduce((sum, p) => sum + p.raised, 0);
-    const totalGoal = problems.reduce((sum, p) => sum + p.fundingGoal, 0);
-    return {
-      totalProblems: problems.length,
-      totalRaised,
-      totalGoal,
-      openProjects: problems.filter((p) => p.status === "Open").length,
-    };
-  }, [problems]);
+  useEffect(() => {
+    fetchProjects();
+  }, []);
 
-  const filteredProblems = useMemo(() => {
-    return problems.filter((p) => {
-      const matchesSearch = [p.title, p.category, p.country, p.description]
-        .join(" ")
-        .toLowerCase()
-        .includes(search.toLowerCase());
-      const matchesCategory = categoryFilter === "all" || p.category === categoryFilter;
-      return matchesSearch && matchesCategory;
-    });
-  }, [problems, search, categoryFilter]);
+  async function fetchProjects() {
+    try {
+      const res = await fetch("/api/projects");
+      const data = await res.json();
+      setProjects(data);
+    } catch (error) {
+      console.error("Failed to fetch projects:", error);
+    }
+  }
 
-  const handleSubmit = (e) => {
+  const totalRaised = useMemo(
+    () => projects.reduce((sum, p) => sum + p.raised, 0),
+    [projects]
+  );
+
+  const totalGoal = useMemo(
+    () => projects.reduce((sum, p) => sum + p.fundingGoal, 0),
+    [projects]
+  );
+
+  function currency(value: number) {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: 0,
+    }).format(value);
+  }
+
+  function progressPercent(raised: number, goal: number) {
+    if (goal <= 0) return 0;
+    return Math.min(100, Math.round((raised / goal) * 100));
+  }
+
+  async function fundProject(id: number) {
+    setFundingId(id);
+
+    try {
+      const res = await fetch("/api/projects", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ id, amount: 1000 }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to fund project");
+      }
+
+      const updated = await res.json();
+
+      setProjects((prev) => prev.map((p) => (p.id === id ? updated : p)));
+    } catch (error) {
+      console.error(error);
+      alert("Funding update failed");
+    } finally {
+      setFundingId(null);
+    }
+  }
+
+  async function addProject(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!form.title || !form.country || !form.description || !form.fundingGoal) return;
 
-    const solutionMap = {
-      Education: "Create a blended learning solution with offline content, teacher coaching, device-sharing, and community-backed operations.",
-      Agriculture: "Build a supply chain solution with storage, transport coordination, market visibility, and farmer training.",
-      Jobs: "Develop a job pipeline with skills assessments, mentorship, project experience, and employer connections.",
-      Health: "Set up mobile care access, digital records, telehealth support, and community outreach partnerships.",
-      Logistics: "Design a smart logistics network using local hubs, route coordination, and transparent shipment tracking.",
-    };
+    if (
+      !form.title.trim() ||
+      !form.description.trim() ||
+      !form.location.trim() ||
+      !form.beneficiaries.trim() ||
+      !form.fundingGoal.trim()
+    ) {
+      alert("Please fill in all fields.");
+      return;
+    }
 
-    const newProblem = {
-      id: Date.now(),
-      title: form.title,
-      category: form.category,
-      country: form.country,
-      description: form.description,
-      impact: form.impact || "Impact estimate pending",
-      fundingGoal: Number(form.fundingGoal),
-      raised: 0,
-      status: "Open",
-      aiSolution: solutionMap[form.category] || "AI-generated solution draft pending.",
-    };
+    if (Number(form.fundingGoal) <= 0) {
+      alert("Funding goal must be greater than 0.");
+      return;
+    }
 
-    setProblems((prev) => [newProblem, ...prev]);
-    setForm({
-      title: "",
-      category: "Education",
-      country: "",
-      description: "",
-      impact: "",
-      fundingGoal: "",
-    });
-  };
+    setLoading(true);
 
-  const quickFund = (id, amount) => {
-    setProblems((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, raised: p.raised + amount } : p))
-    );
-  };
+    try {
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title: form.title,
+          description: form.description,
+          location: form.location,
+          beneficiaries: form.beneficiaries,
+          fundingGoal: Number(form.fundingGoal),
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to create project");
+      }
+
+      const newProject = await res.json();
+
+      setProjects((prev) => [newProject, ...prev]);
+
+      setForm({
+        title: "",
+        description: "",
+        location: "",
+        beneficiaries: "",
+        fundingGoal: "",
+      });
+    } catch (error) {
+      console.error(error);
+      alert("Something went wrong while submitting the project.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
+    <main className="min-h-screen bg-slate-50 text-slate-900">
       <section className="border-b bg-white">
-        <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45 }}
-            className="grid gap-8 lg:grid-cols-[1.3fr_0.7fr]"
-          >
+        <div className="mx-auto max-w-6xl px-6 py-14">
+          <div className="grid gap-10 lg:grid-cols-2 lg:items-center">
             <div>
-              <div className="mb-4 flex items-center gap-2 text-sm font-medium text-slate-600">
-                <Globe className="h-4 w-4" /> ImpactOS MVP
-              </div>
-              <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
-                One platform to turn real-world problems into fundable solutions.
-              </h1>
-              <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
-                Communities post challenges. AI drafts solutions. Experts refine them. Funders back execution.
-                Progress is visible in one place.
+              <p className="mb-3 inline-flex rounded-full bg-slate-100 px-4 py-1 text-sm font-medium text-slate-700">
+                INEF Education Impact Platform
               </p>
+              <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
+                Transforming education in Ghana through practical digital access.
+              </h1>
+              <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-600">
+                A focused pilot platform where schools and communities can post
+                urgent education needs, attract support, and track funding for
+                real projects.
+              </p>
+
               <div className="mt-6 flex flex-wrap gap-3">
-                <Badge className="rounded-full px-4 py-1 text-sm">Education</Badge>
-                <Badge className="rounded-full px-4 py-1 text-sm">Agriculture</Badge>
-                <Badge className="rounded-full px-4 py-1 text-sm">Jobs</Badge>
-                <Badge className="rounded-full px-4 py-1 text-sm">Health</Badge>
-                <Badge className="rounded-full px-4 py-1 text-sm">Logistics</Badge>
+                <span className="rounded-full bg-emerald-100 px-4 py-2 text-sm font-medium text-emerald-700">
+                  Ghana
+                </span>
+                <span className="rounded-full bg-blue-100 px-4 py-2 text-sm font-medium text-blue-700">
+                  Digital Classrooms
+                </span>
+                <span className="rounded-full bg-amber-100 px-4 py-2 text-sm font-medium text-amber-700">
+                  Teacher Training
+                </span>
               </div>
             </div>
 
-            <Card className="rounded-3xl border-0 shadow-lg">
-              <CardHeader>
-                <CardTitle className="text-xl">Join the platform</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <label className="mb-2 block text-sm font-medium">I am joining as</label>
-                  <Select value={role} onValueChange={setRole}>
-                    <SelectTrigger className="rounded-2xl">
-                      <SelectValue placeholder="Choose role" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Community">Community</SelectItem>
-                      <SelectItem value="Expert">Expert</SelectItem>
-                      <SelectItem value="Funder">Funder</SelectItem>
-                      <SelectItem value="NGO">NGO</SelectItem>
-                    </SelectContent>
-                  </Select>
+            <div className="rounded-3xl bg-slate-900 p-8 text-white shadow-xl">
+              <h2 className="text-2xl font-semibold">Pilot Focus</h2>
+              <p className="mt-3 text-slate-300">
+                Start with one country, one sector, and measurable outcomes.
+              </p>
+
+              <div className="mt-8 grid gap-4 sm:grid-cols-2">
+                <div className="rounded-2xl bg-white/10 p-4">
+                  <p className="text-sm text-slate-300">Projects</p>
+                  <p className="mt-2 text-2xl font-bold">{projects.length}</p>
                 </div>
-                <Button className="w-full rounded-2xl">Continue as {role}</Button>
-                <p className="text-sm text-slate-500">
-                  This MVP shows the problem marketplace, AI solution drafts, and quick-funding workflow.
-                </p>
-              </CardContent>
-            </Card>
-          </motion.div>
+                <div className="rounded-2xl bg-white/10 p-4">
+                  <p className="text-sm text-slate-300">Funds Raised</p>
+                  <p className="mt-2 text-2xl font-bold">{currency(totalRaised)}</p>
+                </div>
+                <div className="rounded-2xl bg-white/10 p-4">
+                  <p className="text-sm text-slate-300">Funding Goal</p>
+                  <p className="mt-2 text-2xl font-bold">{currency(totalGoal)}</p>
+                </div>
+                <div className="rounded-2xl bg-white/10 p-4">
+                  <p className="text-sm text-slate-300">Focus Area</p>
+                  <p className="mt-2 text-2xl font-bold">Education</p>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {[
-            { label: "Problems Listed", value: stats.totalProblems, icon: Lightbulb },
-            { label: "Open Projects", value: stats.openProjects, icon: BarChart3 },
-            { label: "Funds Raised", value: currency(stats.totalRaised), icon: DollarSign },
-            { label: "Community Reach", value: "13,700+", icon: Users },
-          ].map((item) => (
-            <Card key={item.label} className="rounded-3xl border-0 shadow-sm">
-              <CardContent className="flex items-center justify-between p-6">
+      <section className="mx-auto max-w-6xl px-6 py-10">
+        <div className="mb-8">
+          <h2 className="text-2xl font-bold">Education Projects</h2>
+          <p className="mt-1 text-slate-600">
+            Interactive pilot projects for schools and communities in Ghana.
+          </p>
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-2">
+          {projects.map((project) => (
+            <div
+              key={project.id}
+              className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"
+            >
+              <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-sm text-slate-500">{item.label}</p>
-                  <p className="mt-2 text-2xl font-bold">{item.value}</p>
+                  <h3 className="text-xl font-semibold">{project.title}</h3>
+                  <p className="mt-1 text-sm text-slate-500">{project.location}</p>
                 </div>
-                <item.icon className="h-7 w-7 text-slate-500" />
-              </CardContent>
-            </Card>
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700">
+                  Education
+                </span>
+              </div>
+
+              <p className="mt-4 leading-7 text-slate-600">
+                {project.description}
+              </p>
+
+              <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                <div className="rounded-2xl bg-slate-50 p-4">
+                  <p className="text-sm text-slate-500">Beneficiaries</p>
+                  <p className="mt-1 font-semibold">{project.beneficiaries}</p>
+                </div>
+                <div className="rounded-2xl bg-slate-50 p-4">
+                  <p className="text-sm text-slate-500">Funding Goal</p>
+                  <p className="mt-1 font-semibold">
+                    {currency(project.fundingGoal)}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-6">
+                <div className="mb-2 flex items-center justify-between text-sm">
+                  <span className="font-medium text-slate-700">
+                    {currency(project.raised)} raised
+                  </span>
+                  <span className="text-slate-500">
+                    {progressPercent(project.raised, project.fundingGoal)}%
+                  </span>
+                </div>
+
+                <div className="h-3 w-full overflow-hidden rounded-full bg-slate-200">
+                  <div
+                    className="h-full rounded-full bg-slate-900 transition-all"
+                    style={{
+                      width: `${progressPercent(
+                        project.raised,
+                        project.fundingGoal
+                      )}%`,
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="mt-6 flex flex-wrap gap-3">
+                <button
+                  onClick={() => fundProject(project.id)}
+                  disabled={fundingId === project.id}
+                  className="rounded-2xl bg-slate-900 px-5 py-3 font-medium text-white transition hover:bg-slate-700 disabled:bg-gray-400"
+                >
+                  {fundingId === project.id ? "Processing..." : "Fund $1,000"}
+                </button>
+
+                <button className="rounded-2xl border border-slate-300 px-5 py-3 font-medium text-slate-700 transition hover:bg-slate-50">
+                  View Details
+                </button>
+              </div>
+            </div>
           ))}
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-4 pb-12 sm:px-6 lg:px-8">
-        <Tabs defaultValue="marketplace" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3 rounded-2xl">
-            <TabsTrigger value="marketplace">Problem Marketplace</TabsTrigger>
-            <TabsTrigger value="submit">Submit a Problem</TabsTrigger>
-            <TabsTrigger value="roadmap">MVP Roadmap</TabsTrigger>
-          </TabsList>
+      <section className="mx-auto max-w-6xl px-6 pb-14">
+        <div className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
+          <h2 className="text-2xl font-bold">Submit a School Need</h2>
+          <p className="mt-2 text-slate-600">
+            Add a real education need from Ghana and test how the platform grows.
+          </p>
 
-          <TabsContent value="marketplace" className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-[1fr_220px]">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <Input
-                  className="rounded-2xl pl-10"
-                  placeholder="Search by title, category, country..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-              </div>
-              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger className="rounded-2xl">
-                  <SelectValue placeholder="Filter category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All categories</SelectItem>
-                  <SelectItem value="Education">Education</SelectItem>
-                  <SelectItem value="Agriculture">Agriculture</SelectItem>
-                  <SelectItem value="Jobs">Jobs</SelectItem>
-                  <SelectItem value="Health">Health</SelectItem>
-                  <SelectItem value="Logistics">Logistics</SelectItem>
-                </SelectContent>
-              </Select>
+          <form onSubmit={addProject} className="mt-8 grid gap-5 md:grid-cols-2">
+            <div className="md:col-span-2">
+              <label className="mb-2 block text-sm font-medium">
+                Project Title
+              </label>
+              <input
+                className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none ring-0 transition focus:border-slate-500"
+                placeholder="School lacks tablets and digital lesson content"
+                value={form.title}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, title: e.target.value }))
+                }
+              />
             </div>
 
-            <div className="grid gap-6 lg:grid-cols-2">
-              {filteredProblems.map((problem, index) => (
-                <motion.div
-                  key={problem.id}
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.35, delay: index * 0.04 }}
-                >
-                  <Card className="h-full rounded-3xl border-0 shadow-sm">
-                    <CardHeader className="space-y-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <CardTitle className="text-xl leading-7">{problem.title}</CardTitle>
-                          <p className="mt-1 text-sm text-slate-500">{problem.country}</p>
-                        </div>
-                        <Badge variant="secondary" className="rounded-full px-3 py-1">
-                          {problem.category}
-                        </Badge>
-                      </div>
-                      <p className="text-sm leading-6 text-slate-600">{problem.description}</p>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="rounded-2xl bg-slate-100 p-4">
-                        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          AI Solution Draft
-                        </p>
-                        <p className="text-sm leading-6 text-slate-700">{problem.aiSolution}</p>
-                      </div>
-
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <div className="rounded-2xl border p-4">
-                          <p className="text-xs uppercase tracking-wide text-slate-500">Impact</p>
-                          <p className="mt-1 font-semibold">{problem.impact}</p>
-                        </div>
-                        <div className="rounded-2xl border p-4">
-                          <p className="text-xs uppercase tracking-wide text-slate-500">Status</p>
-                          <p className="mt-1 font-semibold">{problem.status}</p>
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="mb-2 flex items-center justify-between text-sm">
-                          <span>{currency(problem.raised)} raised</span>
-                          <span>Goal {currency(problem.fundingGoal)}</span>
-                        </div>
-                        <Progress value={percent(problem.raised, problem.fundingGoal)} className="h-3 rounded-full" />
-                        <p className="mt-2 text-xs text-slate-500">
-                          {percent(problem.raised, problem.fundingGoal)}% funded
-                        </p>
-                      </div>
-
-                      <div className="flex flex-wrap gap-3">
-                        <Button className="rounded-2xl" onClick={() => quickFund(problem.id, 10000)}>
-                          Fund $10,000
-                        </Button>
-                        <Button variant="outline" className="rounded-2xl">
-                          View Details
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              ))}
+            <div className="md:col-span-2">
+              <label className="mb-2 block text-sm font-medium">
+                Description
+              </label>
+              <textarea
+                className="min-h-32 w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none transition focus:border-slate-500"
+                placeholder="Describe the school challenge, what is missing, and the impact on students or teachers."
+                value={form.description}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, description: e.target.value }))
+                }
+              />
             </div>
-          </TabsContent>
 
-          <TabsContent value="submit">
-            <Card className="rounded-3xl border-0 shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-2xl">Submit a real-world problem</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleSubmit} className="grid gap-4 md:grid-cols-2">
-                  <div className="md:col-span-2">
-                    <label className="mb-2 block text-sm font-medium">Problem title</label>
-                    <Input
-                      className="rounded-2xl"
-                      value={form.title}
-                      onChange={(e) => setForm({ ...form, title: e.target.value })}
-                      placeholder="Example: Clinics lack affordable diagnostics"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="mb-2 block text-sm font-medium">Category</label>
-                    <Select value={form.category} onValueChange={(value) => setForm({ ...form, category: value })}>
-                      <SelectTrigger className="rounded-2xl">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Education">Education</SelectItem>
-                        <SelectItem value="Agriculture">Agriculture</SelectItem>
-                        <SelectItem value="Jobs">Jobs</SelectItem>
-                        <SelectItem value="Health">Health</SelectItem>
-                        <SelectItem value="Logistics">Logistics</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div>
-                    <label className="mb-2 block text-sm font-medium">Country</label>
-                    <Input
-                      className="rounded-2xl"
-                      value={form.country}
-                      onChange={(e) => setForm({ ...form, country: e.target.value })}
-                      placeholder="Ghana"
-                    />
-                  </div>
-
-                  <div className="md:col-span-2">
-                    <label className="mb-2 block text-sm font-medium">Description</label>
-                    <Textarea
-                      className="min-h-32 rounded-2xl"
-                      value={form.description}
-                      onChange={(e) => setForm({ ...form, description: e.target.value })}
-                      placeholder="Describe the challenge, who is affected, and what is currently missing."
-                    />
-                  </div>
-
-                  <div>
-                    <label className="mb-2 block text-sm font-medium">Impact estimate</label>
-                    <Input
-                      className="rounded-2xl"
-                      value={form.impact}
-                      onChange={(e) => setForm({ ...form, impact: e.target.value })}
-                      placeholder="2,000 people affected"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="mb-2 block text-sm font-medium">Funding goal (USD)</label>
-                    <Input
-                      type="number"
-                      className="rounded-2xl"
-                      value={form.fundingGoal}
-                      onChange={(e) => setForm({ ...form, fundingGoal: e.target.value })}
-                      placeholder="150000"
-                    />
-                  </div>
-
-                  <div className="md:col-span-2 flex flex-wrap gap-3">
-                    <Button type="submit" className="rounded-2xl">Submit problem</Button>
-                    <Button type="button" variant="outline" className="rounded-2xl">
-                      Save draft
-                    </Button>
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="roadmap">
-            <div className="grid gap-6 lg:grid-cols-3">
-              {[
-                {
-                  title: "Phase 1: MVP",
-                  items: [
-                    "Problem listing",
-                    "AI solution drafts",
-                    "Simple funding workflow",
-                    "Basic dashboards",
-                  ],
-                },
-                {
-                  title: "Phase 2: Operations",
-                  items: [
-                    "User authentication",
-                    "Expert review workflow",
-                    "NGO and donor profiles",
-                    "Project milestones",
-                  ],
-                },
-                {
-                  title: "Phase 3: Scale",
-                  items: [
-                    "Country chapters",
-                    "Payments integration",
-                    "Impact analytics",
-                    "Government and enterprise plans",
-                  ],
-                },
-              ].map((phase) => (
-                <Card key={phase.title} className="rounded-3xl border-0 shadow-sm">
-                  <CardHeader>
-                    <CardTitle>{phase.title}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    {phase.items.map((item) => (
-                      <div key={item} className="rounded-2xl border p-3 text-sm">
-                        {item}
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
-              ))}
+            <div>
+              <label className="mb-2 block text-sm font-medium">Location</label>
+              <input
+                className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none transition focus:border-slate-500"
+                placeholder="Ashanti Region, Ghana"
+                value={form.location}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, location: e.target.value }))
+                }
+              />
             </div>
-          </TabsContent>
-        </Tabs>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium">
+                Beneficiaries
+              </label>
+              <input
+                className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none transition focus:border-slate-500"
+                placeholder="500 students"
+                value={form.beneficiaries}
+                onChange={(e) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    beneficiaries: e.target.value,
+                  }))
+                }
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium">
+                Funding Goal (USD)
+              </label>
+              <input
+                type="number"
+                className="w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none transition focus:border-slate-500"
+                placeholder="50000"
+                value={form.fundingGoal}
+                onChange={(e) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    fundingGoal: e.target.value,
+                  }))
+                }
+              />
+            </div>
+
+            <div className="flex items-end">
+              <button
+                type="submit"
+                disabled={loading}
+                className={`w-full rounded-2xl px-5 py-3 font-medium text-white transition ${
+                  loading
+                    ? "bg-gray-400"
+                    : "bg-emerald-600 hover:bg-emerald-700"
+                }`}
+              >
+                {loading ? "Submitting..." : "Submit Project"}
+              </button>
+            </div>
+          </form>
+        </div>
       </section>
-    </div>
+    </main>
   );
 }
