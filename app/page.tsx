@@ -113,24 +113,26 @@ export default function Page() {
 
     try {
       const res = await fetch("/api/projects", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          title: form.title,
-          description: form.description,
-          location: form.location,
-          beneficiaries: form.beneficiaries,
-          fundingGoal: Number(form.fundingGoal),
-        }),
-      });
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    title: form.title,
+    description: form.description,
+    location: form.location,
+    beneficiaries: form.beneficiaries,
+    fundingGoal: Number(form.fundingGoal),
+  }),
+});
 
-      if (!res.ok) {
-        throw new Error("Failed to create project");
-      }
+if (!res.ok) {
+  const errorText = await res.text();
+  alert(errorText);
+  throw new Error(errorText);
+}
 
-      const newProject = await res.json();
+const newProject = await res.json();
 
       setProjects((prev) => [newProject, ...prev]);
 
