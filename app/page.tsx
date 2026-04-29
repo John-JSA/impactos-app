@@ -17,6 +17,8 @@ export default function Page() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(false);
   const [fundingId, setFundingId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [customAmounts, setCustomAmounts] = useState<Record<number, string>>({});
 
   const [form, setForm] = useState({
     title: "",
@@ -63,33 +65,6 @@ export default function Page() {
     return Math.min(100, Math.round((raised / goal) * 100));
   }
 
-  async function fundProject(id: number) {
-    setFundingId(id);
-
-    try {
-      const res = await fetch("/api/projects", {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ id, amount: 1000 }),
-      });
-
-      if (!res.ok) {
-        throw new Error("Failed to fund project");
-      }
-
-      const updated = await res.json();
-
-      setProjects((prev) => prev.map((p) => (p.id === id ? updated : p)));
-    } catch (error) {
-      console.error(error);
-      alert("Funding update failed");
-    } finally {
-      setFundingId(null);
-    }
-  }
-
   async function addProject(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
@@ -113,28 +88,24 @@ export default function Page() {
 
     try {
       const res = await fetch("/api/projects", {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-  },
-  body: JSON.stringify({
-    title: form.title,
-    description: form.description,
-    location: form.location,
-    beneficiaries: form.beneficiaries,
-    fundingGoal: Number(form.fundingGoal),
-  }),
-});
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title: form.title,
+          description: form.description,
+          location: form.location,
+          beneficiaries: form.beneficiaries,
+          fundingGoal: Number(form.fundingGoal),
+        }),
+      });
 
-if (!res.ok) {
-  const errorText = await res.text();
-  alert(errorText);
-  throw new Error(errorText);
-}
+      if (!res.ok) {
+        throw new Error("Failed to create project");
+      }
 
-const newProject = await res.json();
-
-      setProjects((prev) => [newProject, ...prev]);
+      await fetchProjects();
 
       setForm({
         title: "",
@@ -151,18 +122,98 @@ const newProject = await res.json();
     }
   }
 
+  async function fundProject(id: number, amount: number) {
+    if (amount <= 0) {
+      alert("Funding amount must be greater than 0.");
+      return;
+    }
+
+    setFundingId(id);
+
+    try {
+      const res = await fetch("/api/projects", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ id, amount }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Funding update failed");
+      }
+
+      await fetchProjects();
+    } catch (error) {
+      console.error(error);
+      alert("Funding update failed.");
+    } finally {
+      setFundingId(null);
+    }
+  }
+
+  async function deleteProject(id: number) {
+    const confirmed = confirm("Are you sure you want to delete this project?");
+    if (!confirmed) return;
+
+    setDeletingId(id);
+
+    try {
+      const res = await fetch("/api/projects", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ id }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Delete failed");
+      }
+
+      await fetchProjects();
+    } catch (error) {
+      console.error(error);
+      alert("Delete failed.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  function handleCustomFunding(projectId: number) {
+    const value = Number(customAmounts[projectId]);
+
+    if (!value || value <= 0) {
+      alert("Please enter a valid custom amount.");
+      return;
+    }
+
+    fundProject(projectId, value);
+
+    setCustomAmounts((prev) => ({
+      ...prev,
+      [projectId]: "",
+    }));
+  }
+
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
       <section className="border-b bg-white">
         <div className="mx-auto max-w-6xl px-6 py-14">
           <div className="grid gap-10 lg:grid-cols-2 lg:items-center">
             <div>
-              <p className="mb-3 inline-flex rounded-full bg-slate-100 px-4 py-1 text-sm font-medium text-slate-700">
-                INEF Education Impact Platform
+              <p className="mb-4 inline-flex rounded-full bg-emerald-100 px-5 py-2 text-base font-semibold text-emerald-800">
+                Ghana Education Transformation
               </p>
-              <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
-                Transforming education in Ghana through practical digital access.
+
+              <h1 className="text-5xl font-extrabold tracking-tight text-slate-950 sm:text-6xl">
+                INEF Education Impact Platform
               </h1>
+
+              <h2 className="mt-5 text-3xl font-bold tracking-tight text-slate-800 sm:text-4xl">
+                Transforming education in Ghana through practical digital access.
+              </h2>
+
               <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-600">
                 A focused pilot platform where schools and communities can post
                 urgent education needs, attract support, and track funding for
@@ -193,14 +244,21 @@ const newProject = await res.json();
                   <p className="text-sm text-slate-300">Projects</p>
                   <p className="mt-2 text-2xl font-bold">{projects.length}</p>
                 </div>
+
                 <div className="rounded-2xl bg-white/10 p-4">
                   <p className="text-sm text-slate-300">Funds Raised</p>
-                  <p className="mt-2 text-2xl font-bold">{currency(totalRaised)}</p>
+                  <p className="mt-2 text-2xl font-bold">
+                    {currency(totalRaised)}
+                  </p>
                 </div>
+
                 <div className="rounded-2xl bg-white/10 p-4">
                   <p className="text-sm text-slate-300">Funding Goal</p>
-                  <p className="mt-2 text-2xl font-bold">{currency(totalGoal)}</p>
+                  <p className="mt-2 text-2xl font-bold">
+                    {currency(totalGoal)}
+                  </p>
                 </div>
+
                 <div className="rounded-2xl bg-white/10 p-4">
                   <p className="text-sm text-slate-300">Focus Area</p>
                   <p className="mt-2 text-2xl font-bold">Education</p>
@@ -219,6 +277,12 @@ const newProject = await res.json();
           </p>
         </div>
 
+        {projects.length === 0 && (
+          <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center text-slate-600 shadow-sm">
+            No projects yet. Add the first school need below.
+          </div>
+        )}
+
         <div className="grid gap-6 lg:grid-cols-2">
           {projects.map((project) => (
             <div
@@ -228,8 +292,11 @@ const newProject = await res.json();
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <h3 className="text-xl font-semibold">{project.title}</h3>
-                  <p className="mt-1 text-sm text-slate-500">{project.location}</p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {project.location}
+                  </p>
                 </div>
+
                 <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700">
                   Education
                 </span>
@@ -244,6 +311,7 @@ const newProject = await res.json();
                   <p className="text-sm text-slate-500">Beneficiaries</p>
                   <p className="mt-1 font-semibold">{project.beneficiaries}</p>
                 </div>
+
                 <div className="rounded-2xl bg-slate-50 p-4">
                   <p className="text-sm text-slate-500">Funding Goal</p>
                   <p className="mt-1 font-semibold">
@@ -275,13 +343,57 @@ const newProject = await res.json();
                 </div>
               </div>
 
+              <div className="mt-6 rounded-2xl bg-slate-50 p-4">
+                <p className="mb-3 text-sm font-semibold text-slate-700">
+                  Support this project
+                </p>
+
+                <div className="flex flex-wrap gap-2">
+                  {[10, 50, 100, 500, 1000].map((amount) => (
+                    <button
+                      key={amount}
+                      onClick={() => fundProject(project.id, amount)}
+                      disabled={fundingId === project.id}
+                      className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:bg-gray-200"
+                    >
+                      {fundingId === project.id
+                        ? "Processing..."
+                        : currency(amount)}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                  <input
+                    type="number"
+                    placeholder="Custom amount"
+                    value={customAmounts[project.id] || ""}
+                    onChange={(e) =>
+                      setCustomAmounts((prev) => ({
+                        ...prev,
+                        [project.id]: e.target.value,
+                      }))
+                    }
+                    className="w-full rounded-xl border border-slate-300 px-4 py-2 outline-none focus:border-slate-500"
+                  />
+
+                  <button
+                    onClick={() => handleCustomFunding(project.id)}
+                    disabled={fundingId === project.id}
+                    className="rounded-xl bg-slate-900 px-5 py-2 font-medium text-white transition hover:bg-slate-700 disabled:bg-gray-400"
+                  >
+                    {fundingId === project.id ? "Processing..." : "Give Custom"}
+                  </button>
+                </div>
+              </div>
+
               <div className="mt-6 flex flex-wrap gap-3">
                 <button
-                  onClick={() => fundProject(project.id)}
-                  disabled={fundingId === project.id}
-                  className="rounded-2xl bg-slate-900 px-5 py-3 font-medium text-white transition hover:bg-slate-700 disabled:bg-gray-400"
+                  onClick={() => deleteProject(project.id)}
+                  disabled={deletingId === project.id}
+                  className="rounded-2xl border border-red-300 px-5 py-3 font-medium text-red-700 transition hover:bg-red-50 disabled:bg-gray-100"
                 >
-                  {fundingId === project.id ? "Processing..." : "Fund $1,000"}
+                  {deletingId === project.id ? "Deleting..." : "Delete"}
                 </button>
 
                 <button className="rounded-2xl border border-slate-300 px-5 py-3 font-medium text-slate-700 transition hover:bg-slate-50">

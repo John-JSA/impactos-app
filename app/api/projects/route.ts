@@ -40,3 +40,13 @@ export async function PATCH(req: Request) {
 
   return Response.json(updated);
 }
+
+export async function DELETE(req: Request) {
+  const body = await req.json();
+
+  await prisma.project.delete({
+    where: { id: Number(body.id) },
+  });
+
+  return Response.json({ success: true });
+}
