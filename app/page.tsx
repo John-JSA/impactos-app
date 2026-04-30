@@ -18,9 +18,19 @@ export default function Page() {
   const [loading, setLoading] = useState(false);
   const [fundingId, setFundingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [customAmounts, setCustomAmounts] = useState<Record<number, string>>({});
+  const [message, setMessage] = useState("");
 
   const [form, setForm] = useState({
+    title: "",
+    description: "",
+    location: "",
+    beneficiaries: "",
+    fundingGoal: "",
+  });
+
+  const [editForm, setEditForm] = useState({
     title: "",
     description: "",
     location: "",
@@ -39,6 +49,7 @@ export default function Page() {
       setProjects(data);
     } catch (error) {
       console.error("Failed to fetch projects:", error);
+      setMessage("Failed to load projects.");
     }
   }
 
@@ -85,6 +96,7 @@ export default function Page() {
     }
 
     setLoading(true);
+    setMessage("");
 
     try {
       const res = await fetch("/api/projects", {
@@ -101,9 +113,7 @@ export default function Page() {
         }),
       });
 
-      if (!res.ok) {
-        throw new Error("Failed to create project");
-      }
+      if (!res.ok) throw new Error("Failed to create project");
 
       await fetchProjects();
 
@@ -114,6 +124,8 @@ export default function Page() {
         beneficiaries: "",
         fundingGoal: "",
       });
+
+      setMessage("Project submitted successfully.");
     } catch (error) {
       console.error(error);
       alert("Something went wrong while submitting the project.");
@@ -129,6 +141,7 @@ export default function Page() {
     }
 
     setFundingId(id);
+    setMessage("");
 
     try {
       const res = await fetch("/api/projects", {
@@ -139,44 +152,15 @@ export default function Page() {
         body: JSON.stringify({ id, amount }),
       });
 
-      if (!res.ok) {
-        throw new Error("Funding update failed");
-      }
+      if (!res.ok) throw new Error("Funding update failed");
 
       await fetchProjects();
+      setMessage(`${currency(amount)} added successfully.`);
     } catch (error) {
       console.error(error);
       alert("Funding update failed.");
     } finally {
       setFundingId(null);
-    }
-  }
-
-  async function deleteProject(id: number) {
-    const confirmed = confirm("Are you sure you want to delete this project?");
-    if (!confirmed) return;
-
-    setDeletingId(id);
-
-    try {
-      const res = await fetch("/api/projects", {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ id }),
-      });
-
-      if (!res.ok) {
-        throw new Error("Delete failed");
-      }
-
-      await fetchProjects();
-    } catch (error) {
-      console.error(error);
-      alert("Delete failed.");
-    } finally {
-      setDeletingId(null);
     }
   }
 
@@ -194,6 +178,100 @@ export default function Page() {
       ...prev,
       [projectId]: "",
     }));
+  }
+
+  function startEdit(project: Project) {
+    setEditingId(project.id);
+    setEditForm({
+      title: project.title,
+      description: project.description,
+      location: project.location,
+      beneficiaries: project.beneficiaries,
+      fundingGoal: String(project.fundingGoal),
+    });
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditForm({
+      title: "",
+      description: "",
+      location: "",
+      beneficiaries: "",
+      fundingGoal: "",
+    });
+  }
+
+  async function saveEdit(id: number) {
+    if (
+      !editForm.title.trim() ||
+      !editForm.description.trim() ||
+      !editForm.location.trim() ||
+      !editForm.beneficiaries.trim() ||
+      !editForm.fundingGoal.trim()
+    ) {
+      alert("Please fill in all edit fields.");
+      return;
+    }
+
+    if (Number(editForm.fundingGoal) <= 0) {
+      alert("Funding goal must be greater than 0.");
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/projects", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id,
+          title: editForm.title,
+          description: editForm.description,
+          location: editForm.location,
+          beneficiaries: editForm.beneficiaries,
+          fundingGoal: Number(editForm.fundingGoal),
+        }),
+      });
+
+      if (!res.ok) throw new Error("Edit failed");
+
+      await fetchProjects();
+      cancelEdit();
+      setMessage("Project updated successfully.");
+    } catch (error) {
+      console.error(error);
+      alert("Edit failed.");
+    }
+  }
+
+  async function deleteProject(id: number) {
+    const confirmed = confirm("Are you sure you want to delete this project?");
+    if (!confirmed) return;
+
+    setDeletingId(id);
+    setMessage("");
+
+    try {
+      const res = await fetch("/api/projects", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ id }),
+      });
+
+      if (!res.ok) throw new Error("Delete failed");
+
+      await fetchProjects();
+      setMessage("Project deleted successfully.");
+    } catch (error) {
+      console.error(error);
+      alert("Delete failed.");
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   return (
@@ -269,6 +347,14 @@ export default function Page() {
         </div>
       </section>
 
+      {message && (
+        <div className="mx-auto mt-6 max-w-6xl px-6">
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-800">
+            {message}
+          </div>
+        </div>
+      )}
+
       <section className="mx-auto max-w-6xl px-6 py-10">
         <div className="mb-8">
           <h2 className="text-2xl font-bold">Education Projects</h2>
@@ -319,6 +405,93 @@ export default function Page() {
                   </p>
                 </div>
               </div>
+
+              {editingId === project.id && (
+                <div className="mt-6 rounded-2xl border border-blue-200 bg-blue-50 p-4">
+                  <h4 className="mb-4 font-semibold text-blue-900">
+                    Edit Project
+                  </h4>
+
+                  <div className="grid gap-3">
+                    <input
+                      className="rounded-xl border px-4 py-2"
+                      value={editForm.title}
+                      onChange={(e) =>
+                        setEditForm((prev) => ({
+                          ...prev,
+                          title: e.target.value,
+                        }))
+                      }
+                      placeholder="Title"
+                    />
+
+                    <textarea
+                      className="rounded-xl border px-4 py-2"
+                      value={editForm.description}
+                      onChange={(e) =>
+                        setEditForm((prev) => ({
+                          ...prev,
+                          description: e.target.value,
+                        }))
+                      }
+                      placeholder="Description"
+                    />
+
+                    <input
+                      className="rounded-xl border px-4 py-2"
+                      value={editForm.location}
+                      onChange={(e) =>
+                        setEditForm((prev) => ({
+                          ...prev,
+                          location: e.target.value,
+                        }))
+                      }
+                      placeholder="Location"
+                    />
+
+                    <input
+                      className="rounded-xl border px-4 py-2"
+                      value={editForm.beneficiaries}
+                      onChange={(e) =>
+                        setEditForm((prev) => ({
+                          ...prev,
+                          beneficiaries: e.target.value,
+                        }))
+                      }
+                      placeholder="Beneficiaries"
+                    />
+
+                    <input
+                      type="number"
+                      className="rounded-xl border px-4 py-2"
+                      value={editForm.fundingGoal}
+                      onChange={(e) =>
+                        setEditForm((prev) => ({
+                          ...prev,
+                          fundingGoal: e.target.value,
+                        }))
+                      }
+                      placeholder="Funding Goal"
+                    />
+                  </div>
+
+                  <div className="mt-4 flex gap-3">
+                    <button
+                      onClick={() => saveEdit(project.id)}
+                      className="rounded-xl bg-blue-700 px-4 py-2 font-medium text-white"
+                    >
+                      Save Changes
+                    </button>
+
+                    <button
+                      onClick={cancelEdit}
+                      className="rounded-xl border px-4 py-2 font-medium text-slate-700"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="mt-6">
                 <div className="mb-2 flex items-center justify-between text-sm">
@@ -388,6 +561,13 @@ export default function Page() {
               </div>
 
               <div className="mt-6 flex flex-wrap gap-3">
+                <button
+                  onClick={() => startEdit(project)}
+                  className="rounded-2xl border border-blue-300 px-5 py-3 font-medium text-blue-700 transition hover:bg-blue-50"
+                >
+                  Edit
+                </button>
+
                 <button
                   onClick={() => deleteProject(project.id)}
                   disabled={deletingId === project.id}

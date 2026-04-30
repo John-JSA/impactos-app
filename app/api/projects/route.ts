@@ -20,6 +20,7 @@ export async function POST(req: Request) {
       location: body.location,
       beneficiaries: body.beneficiaries,
       fundingGoal: Number(body.fundingGoal),
+      raised: 0,
     },
   });
 
@@ -29,12 +30,27 @@ export async function POST(req: Request) {
 export async function PATCH(req: Request) {
   const body = await req.json();
 
+  if (body.amount) {
+    const updated = await prisma.project.update({
+      where: { id: Number(body.id) },
+      data: {
+        raised: {
+          increment: Number(body.amount),
+        },
+      },
+    });
+
+    return Response.json(updated);
+  }
+
   const updated = await prisma.project.update({
     where: { id: Number(body.id) },
     data: {
-      raised: {
-        increment: Number(body.amount),
-      },
+      title: body.title,
+      description: body.description,
+      location: body.location,
+      beneficiaries: body.beneficiaries,
+      fundingGoal: Number(body.fundingGoal),
     },
   });
 
