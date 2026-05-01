@@ -1,16 +1,36 @@
+import { auth } from "@/auth";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
+function getUserId(session: any) {
+  return session?.user?.id;
+}
+
 export async function GET() {
   const projects = await prisma.project.findMany({
     orderBy: { createdAt: "desc" },
+    include: {
+      owner: {
+        select: {
+          name: true,
+          email: true,
+        },
+      },
+    },
   });
 
   return Response.json(projects);
 }
 
 export async function POST(req: Request) {
+  const session = await auth();
+  const userId = getUserId(session);
+
+  if (!userId) {
+    return Response.json({ error: "You must sign in first." }, { status: 401 });
+  }
+
   const body = await req.json();
 
   const project = await prisma.project.create({
@@ -21,6 +41,7 @@ export async function POST(req: Request) {
       beneficiaries: body.beneficiaries,
       fundingGoal: Number(body.fundingGoal),
       raised: 0,
+      ownerId: userId,
     },
   });
 
@@ -30,6 +51,7 @@ export async function POST(req: Request) {
 export async function PATCH(req: Request) {
   const body = await req.json();
 
+  // Funding update: anyone signed in or not can simulate support for now.
   if (body.amount) {
     const updated = await prisma.project.update({
       where: { id: Number(body.id) },
@@ -43,6 +65,28 @@ export async function PATCH(req: Request) {
     return Response.json(updated);
   }
 
+  const session = await auth();
+  const userId = getUserId(session);
+
+  if (!userId) {
+    return Response.json({ error: "You must sign in first." }, { status: 401 });
+  }
+
+  const existing = await prisma.project.findUnique({
+    where: { id: Number(body.id) },
+  });
+
+  if (!existing) {
+    return Response.json({ error: "Project not found." }, { status: 404 });
+  }
+
+  if (existing.ownerId && existing.ownerId !== userId) {
+    return Response.json(
+      { error: "You can only edit your own project." },
+      { status: 403 }
+    );
+  }
+
   const updated = await prisma.project.update({
     where: { id: Number(body.id) },
     data: {
@@ -51,6 +95,7 @@ export async function PATCH(req: Request) {
       location: body.location,
       beneficiaries: body.beneficiaries,
       fundingGoal: Number(body.fundingGoal),
+      ownerId: existing.ownerId || userId,
     },
   });
 
@@ -58,7 +103,29 @@ export async function PATCH(req: Request) {
 }
 
 export async function DELETE(req: Request) {
+  const session = await auth();
+  const userId = getUserId(session);
+
+  if (!userId) {
+    return Response.json({ error: "You must sign in first." }, { status: 401 });
+  }
+
   const body = await req.json();
+
+  const existing = await prisma.project.findUnique({
+    where: { id: Number(body.id) },
+  });
+
+  if (!existing) {
+    return Response.json({ error: "Project not found." }, { status: 404 });
+  }
+
+  if (existing.ownerId && existing.ownerId !== userId) {
+    return Response.json(
+      { error: "You can only delete your own project." },
+      { status: 403 }
+    );
+  }
 
   await prisma.project.delete({
     where: { id: Number(body.id) },

@@ -1,5 +1,6 @@
 "use client";
 
+import { signIn, signOut, useSession } from "next-auth/react";
 import { useEffect, useMemo, useState } from "react";
 
 type Project = {
@@ -21,6 +22,8 @@ export default function Page() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [customAmounts, setCustomAmounts] = useState<Record<number, string>>({});
   const [message, setMessage] = useState("");
+  const { data: session, status } = useSession();
+const isSignedIn = status === "authenticated";
 
   const [form, setForm] = useState({
     title: "",
@@ -78,6 +81,11 @@ export default function Page() {
 
   async function addProject(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+      if (!isSignedIn) {
+  alert("Please sign in before submitting a project.");
+  signIn("github");
+  return;
+}
 
     if (
       !form.title.trim() ||
@@ -181,15 +189,22 @@ export default function Page() {
   }
 
   function startEdit(project: Project) {
-    setEditingId(project.id);
-    setEditForm({
-      title: project.title,
-      description: project.description,
-      location: project.location,
-      beneficiaries: project.beneficiaries,
-      fundingGoal: String(project.fundingGoal),
-    });
+  if (!isSignedIn) {
+    alert("Please sign in before editing a project.");
+    signIn("github");
+    return;
   }
+
+  setEditingId(project.id);
+  setEditForm({
+    title: project.title,
+    description: project.description,
+    location: project.location,
+    beneficiaries: project.beneficiaries,
+    fundingGoal: String(project.fundingGoal),
+  });
+}
+      
 
   function cancelEdit() {
     setEditingId(null);
@@ -252,7 +267,12 @@ export default function Page() {
 
     setDeletingId(id);
     setMessage("");
-
+    
+    if (!isSignedIn) {
+  alert("Please sign in before deleting a project.");
+  signIn("github");
+  return;
+}
     try {
       const res = await fetch("/api/projects", {
         method: "DELETE",
@@ -287,6 +307,29 @@ export default function Page() {
               <h1 className="text-5xl font-extrabold tracking-tight text-slate-950 sm:text-6xl">
                 INEF Education Impact Platform
               </h1>
+              <div className="mt-6 flex flex-wrap items-center gap-3">
+  {isSignedIn ? (
+    <>
+      <span className="rounded-full bg-green-100 px-4 py-2 text-sm font-medium text-green-800">
+        Signed in as {session?.user?.name || session?.user?.email}
+      </span>
+
+      <button
+        onClick={() => signOut()}
+        className="rounded-xl border border-slate-300 px-4 py-2 font-medium text-slate-700 hover:bg-slate-50"
+      >
+        Sign out
+      </button>
+    </>
+  ) : (
+    <button
+      onClick={() => signIn("github")}
+      className="rounded-xl bg-slate-900 px-5 py-3 font-medium text-white hover:bg-slate-700"
+    >
+      Sign in with GitHub
+    </button>
+  )}
+</div>
 
               <h2 className="mt-5 text-3xl font-bold tracking-tight text-slate-800 sm:text-4xl">
                 Transforming education in Ghana through practical digital access.
